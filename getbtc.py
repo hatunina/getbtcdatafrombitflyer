@@ -38,7 +38,7 @@ class PythonBitFlyerApp(object):
 
     def run(self):
 
-        arg_date = dt.strptime('2018-04-05 12:00:56', '%Y-%m-%d %H:%M:%S')
+        arg_date = dt.strptime('2018-04-05 23:32:56', '%Y-%m-%d %H:%M:%S')
         arg_date = arg_date.replace(second=0)
 
         while True:
@@ -102,16 +102,28 @@ class PythonBitFlyerApp(object):
             if self.first_time_flag:
                 return 'miss'
             else:
-                start_id = int(search_btc_df['id'][499]) + 5000
+                if (arg_date - date).total_seconds() <= 300:
+                    start_id = int(search_btc_df['id'][0]) + 500
+                else:
+                    start_id = int(search_btc_df['id'][499]) + 5000
                 self.first_time_flag = False
                 return start_id
         elif date > arg_date:
             # 引数のdateは今取得したbtcデータよりも過去にある
-            start_id = int(search_btc_df['id'][499]) - 5000
+            if (date - arg_date).total_seconds() <= 300:
+                start_id = int(search_btc_df['id'][499]) - 500
+            else:
+                start_id = int(search_btc_df['id'][0]) - 5000
+            self.first_time_flag = False
             return start_id
         else:
-            print('stop')
-            pass
+            iso_arg_date = arg_date - datetime.timedelta(hours=9)
+            iso_arg_date = str(iso_arg_date.hour) + ':' + str(iso_arg_date.minute)
+            for i, date in enumerate(search_btc_df['exec_date']):
+                if iso_arg_date in date:
+                    tmp_series = search_btc_df.iloc[i]
+
+            return tmp_series['id']
 
 
 if __name__ == '__main__':
