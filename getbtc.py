@@ -12,7 +12,7 @@ import time
 
 class GetBtcDataFromBitflyer(object):
 
-    def __init__(self, count=500, count_limit=20):
+    def __init__(self, count=500, count_limit=200):
         # before id
         self.before_id = 0
         # bit data size
@@ -22,7 +22,6 @@ class GetBtcDataFromBitflyer(object):
         # request url
         self.domain_url = 'https://api.bitflyer.jp'
         self.execution_history_url = '/v1/getexecutions'
-        self.output_file_name = 'bit_data.csv'
         # column array
         self.keys = ['id',
                      'side',
@@ -36,8 +35,9 @@ class GetBtcDataFromBitflyer(object):
 
         self.execution_history_params = {'count': self.count,
                                     'before': self.before_id}
-        self.arg_date = dt.strptime('2018-01-06 04:56:00', '%Y-%m-%d %H:%M:%S')
+        self.arg_date = dt.strptime('2017-11-06 02:50:00', '%Y-%m-%d %H:%M:%S')
         self.change_num_base = 500
+        self.target_date_id = 0
 
     def run(self):
         self.arg_date = self.arg_date.replace(second=0)
@@ -46,68 +46,84 @@ class GetBtcDataFromBitflyer(object):
             start_id, is_find_start_id = self.search_start_id()
             self.execution_history_params['before'] = start_id
             if is_find_start_id:
+                self.target_date_id = start_id
+                print('The id of the date to be searched was found: {}'.format(self.target_date_id))
                 break
-
-
-        # init ProgressBar
-        p = ProgressBar(0, self.count_limit)
 
         # init DataFrame
         df = pd.DataFrame(columns=self.keys)
+        self.execution_history_params['before'] = 0
 
-        for progress_num in range(self.count_limit):
-            # request execution history
-            response = self.execute_api_request(self.execution_history_url, self.execution_history_params)
-            time.sleep(0.5)
+        while True:
+            # init ProgressBar
+            p = ProgressBar(0, self.count_limit)
+            for progress_num in range(self.count_limit):
+                # request execution history
+                response = self.execute_api_request(self.execution_history_url, self.execution_history_params)
+                time.sleep(0.5)
 
-            btc_list = response.json()
+                btc_list = response.json()
 
-            last_id = btc_list[-1]['id']
+                last_id = btc_list[-1]['id']
 
-            # update parameters with last id
-            self.execution_history_params['before'] = last_id
+                # update parameters with last id
+                self.execution_history_params['before'] = last_id
 
-            # show execution progress
-            p.update(progress_num)
+                tmp_df = pd.read_json(response.text)
+                df = pd.concat([df, tmp_df])
 
-            tmp_df = pd.read_json(response.text)
-            df = pd.concat([df, tmp_df])
+                result_df = df[df['id'] >= self.target_date_id]
 
-        self.save_result_data(df)
+                # show execution progress
+                p.update(progress_num)
+
+                if df.shape[0] > result_df.shape[0]:
+                    break
+
+            self.save_result_data(result_df)
+
+            if df.shape[0] > result_df.shape[0]:
+                break
 
     # execute api request
     def execute_api_request(self, url, params):
         request_url = self.domain_url + url
         return requests.get(request_url, params=params)
 
+    def format_date(self, date_line):
+        tmp_date = date_line.replace('T', ' ')
+        tmp_date = tmp_date.split('.')[0]
+        date = dt.strptime(tmp_date, '%Y-%m-%d %H:%M:%S')
+        date = date.replace(second=0)
+        # Adjust ISO format to Japan time
+        date = date + datetime.timedelta(hours=9)
+        return date
+
     def save_result_data(self, result_df):
-        result_df.to_csv(self.output_file_name, index=False)
-        print('save on {}'.format(self.output_file_name))
+        first_date = self.format_date(result_df['exec_date'].iloc[0])
+        last_date = self.format_date(result_df['exec_date'].iloc[-1])
+
+        str_first_date = str(first_date).replace(' ', '-').replace(':00', '')
+        str_last_date = str(last_date).replace(' ', '-').replace(':00', '')
+
+        file_name = 'btc_{}_{}.csv'.format(str_first_date, str_last_date)
+        result_df.to_csv(file_name, index=False)
+        print('save on {}'.format(file_name))
 
     def search_start_id(self):
         # request execution history
-        print(self.execution_history_params)
         response = self.execute_api_request(self.execution_history_url, self.execution_history_params)
         time.sleep(0.5)
 
         search_btc_df = pd.read_json(response.text)
-        print('get_id: {}'.format(search_btc_df['id'][499]))
 
+        date = self.format_date(search_btc_df['exec_date'].iloc[0])
 
-        str_date = search_btc_df['exec_date'].iloc[0]
-        tmp_date = str_date.replace('T', ' ')
-        tmp_date = tmp_date.split('.')[0]
-        date = dt.strptime(tmp_date, '%Y-%m-%d %H:%M:%S')
-        date = date.replace(second=0)
-
-        # Adjust ISO format to Japan time
-        date = date + datetime.timedelta(hours=9)
+        print('looking for date: {}'.format(date))
 
         start_id, is_find_start_id = self.get_start_id(date, search_btc_df)
 
         return start_id, is_find_start_id
-
-
 
     def get_start_id(self, date, search_btc_df):
         is_find_start_id = False
@@ -115,13 +131,11 @@ class GetBtcDataFromBitflyer(object):
             diff_second = (self.arg_date - date).total_seconds()
             change_id_num = self.get_chage_id_num(diff_second)
             start_id = int(search_btc_df['id'][0]) + change_id_num
-            print('start_id: {}'.format(start_id))
 
         elif date > self.arg_date:
             diff_second = (date - self.arg_date).total_seconds()
             change_id_num = self.get_chage_id_num(diff_second)
             start_id = int(search_btc_df['id'][499]) - change_id_num
-            print('start_id: {}'.format(start_id))
 
         else:
             iso_arg_date = self.arg_date - datetime.timedelta(hours=9)
@@ -142,13 +156,13 @@ class GetBtcDataFromBitflyer(object):
         diff_month = diff_week/4
         diff_year = diff_month/12
 
-        # TODO use variable num
         if diff_year >= 1:
             # 26,280,000
-            change_id_num = (self.change_num_base * 60 * 24 * 365) * 0.1
+            # floatだとパラメータが認識されない
+            change_id_num = int((self.change_num_base * 60 * 24 * 365) * 0.1)
         elif diff_month >= 1:
-            # 2,232,000
-            change_id_num = (self.change_num_base * 60 * 24 * 31) * 0.1
+            # 4,464,000
+            change_id_num = int((self.change_num_base * 60 * 24 * 31) * 0.1)
         elif diff_week >= 1:
             # 10080
             change_id_num = self.change_num_base * 60 * 24 * 7
