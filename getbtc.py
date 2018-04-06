@@ -7,9 +7,10 @@ import pandas as pd
 from progressbar import ProgressBar
 from datetime import datetime as dt
 import datetime
+import time
 
 
-class PythonBitFlyerApp(object):
+class GetBtcDataFromBitflyer(object):
 
     def __init__(self, count=500, count_limit=20):
         # before id
@@ -35,15 +36,17 @@ class PythonBitFlyerApp(object):
 
         self.execution_history_params = {'count': self.count,
                                     'before': self.before_id}
+        self.arg_date = dt.strptime('2018-01-06 04:56:00', '%Y-%m-%d %H:%M:%S')
+        self.change_num_base = 500
 
     def run(self):
-
-        arg_date = dt.strptime('2018-04-05 23:32:56', '%Y-%m-%d %H:%M:%S')
-        arg_date = arg_date.replace(second=0)
+        self.arg_date = self.arg_date.replace(second=0)
 
         while True:
-            start_id = self.search_start_id(arg_date)
+            start_id, is_find_start_id = self.search_start_id()
             self.execution_history_params['before'] = start_id
+            if is_find_start_id:
+                break
 
 
         # init ProgressBar
@@ -55,6 +58,8 @@ class PythonBitFlyerApp(object):
         for progress_num in range(self.count_limit):
             # request execution history
             response = self.execute_api_request(self.execution_history_url, self.execution_history_params)
+            time.sleep(0.5)
+
             btc_list = response.json()
 
             last_id = btc_list[-1]['id']
@@ -79,11 +84,14 @@ class PythonBitFlyerApp(object):
         result_df.to_csv(self.output_file_name, index=False)
         print('save on {}'.format(self.output_file_name))
 
-    def search_start_id(self, arg_date):
+    def search_start_id(self):
         # request execution history
+        print(self.execution_history_params)
         response = self.execute_api_request(self.execution_history_url, self.execution_history_params)
+        time.sleep(0.5)
 
         search_btc_df = pd.read_json(response.text)
+        print('get_id: {}'.format(search_btc_df['id'][499]))
 
 
         str_date = search_btc_df['exec_date'].iloc[0]
@@ -95,37 +103,68 @@ class PythonBitFlyerApp(object):
         # Adjust ISO format to Japan time
         date = date + datetime.timedelta(hours=9)
 
-        if date < arg_date:
-            # 引数のdateは今取得したbtcデータよりも未来にある
-            # 初回は本当に未来のdateを指定されているのでエラー
-            # ２回目以降は過去に戻りすぎなのでidを増やす
-            if self.first_time_flag:
-                return 'miss'
-            else:
-                if (arg_date - date).total_seconds() <= 300:
-                    start_id = int(search_btc_df['id'][0]) + 500
-                else:
-                    start_id = int(search_btc_df['id'][499]) + 5000
-                self.first_time_flag = False
-                return start_id
-        elif date > arg_date:
-            # 引数のdateは今取得したbtcデータよりも過去にある
-            if (date - arg_date).total_seconds() <= 300:
-                start_id = int(search_btc_df['id'][499]) - 500
-            else:
-                start_id = int(search_btc_df['id'][0]) - 5000
-            self.first_time_flag = False
-            return start_id
+        start_id, is_find_start_id = self.get_start_id(date, search_btc_df)
+
+        return start_id, is_find_start_id
+
+
+
+    def get_start_id(self, date, search_btc_df):
+        is_find_start_id = False
+        if date < self.arg_date:
+            diff_second = (self.arg_date - date).total_seconds()
+            change_id_num = self.get_chage_id_num(diff_second)
+            start_id = int(search_btc_df['id'][0]) + change_id_num
+            print('start_id: {}'.format(start_id))
+
+        elif date > self.arg_date:
+            diff_second = (date - self.arg_date).total_seconds()
+            change_id_num = self.get_chage_id_num(diff_second)
+            start_id = int(search_btc_df['id'][499]) - change_id_num
+            print('start_id: {}'.format(start_id))
+
         else:
-            iso_arg_date = arg_date - datetime.timedelta(hours=9)
+            iso_arg_date = self.arg_date - datetime.timedelta(hours=9)
             iso_arg_date = str(iso_arg_date.hour) + ':' + str(iso_arg_date.minute)
             for i, date in enumerate(search_btc_df['exec_date']):
                 if iso_arg_date in date:
                     tmp_series = search_btc_df.iloc[i]
+                    start_id = tmp_series['id']
+            is_find_start_id = True
 
-            return tmp_series['id']
+        return start_id, is_find_start_id
+
+    def get_chage_id_num(self, diff_second):
+        diff_minutes = diff_second/60
+        diff_hour = diff_minutes/60
+        diff_date = diff_hour/24
+        diff_week = diff_date/7
+        diff_month = diff_week/4
+        diff_year = diff_month/12
+
+        # TODO use variable num
+        if diff_year >= 1:
+            # 26,280,000
+            change_id_num = (self.change_num_base * 60 * 24 * 365) * 0.1
+        elif diff_month >= 1:
+            # 2,232,000
+            change_id_num = (self.change_num_base * 60 * 24 * 31) * 0.1
+        elif diff_week >= 1:
+            # 10080
+            change_id_num = self.change_num_base * 60 * 24 * 7
+        elif diff_date >= 1:
+            change_id_num = self.change_num_base * 60 * 24
+        elif diff_hour >= 1:
+            change_id_num = self.change_num_base * 60
+        elif diff_minutes >= 1:
+            change_id_num = self.change_num_base
+        elif diff_minutes == 0:
+            change_id_num = 0
+
+        return change_id_num
+
 
 
 if __name__ == '__main__':
-    python_bit_flyer_app = PythonBitFlyerApp()
-    python_bit_flyer_app.run()
+    get_btc = GetBtcDataFromBitflyer()
+    get_btc.run()
