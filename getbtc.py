@@ -12,7 +12,7 @@ import time
 
 class GetBtcDataFromBitflyer(object):
 
-    def __init__(self, count=500, count_limit=200):
+    def __init__(self, count=500, count_limit=1000):
         # before id
         self.before_id = 0
         # bit data size
@@ -35,12 +35,20 @@ class GetBtcDataFromBitflyer(object):
 
         self.execution_history_params = {'count': self.count,
                                     'before': self.before_id}
-        self.arg_date = dt.strptime('2017-11-06 02:50:00', '%Y-%m-%d %H:%M:%S')
+        self.arg_date = dt.strptime('2015-06-24 05:58:00', '%Y-%m-%d %H:%M:%S')
+        # first date
+        # 2015-06-24T05:58:48.773
+        # '2015-06-24 05:58:00'より過去はエラーを出す
+        self.first_date = dt.strptime('2015-06-24 05:58:00', '%Y-%m-%d %H:%M:%S')
         self.change_num_base = 500
         self.target_date_id = 0
 
     def run(self):
         self.arg_date = self.arg_date.replace(second=0)
+        if self.is_arg_date_too_past():
+            print('A date in the past is specified from the first deal.')
+            print('The first deal date: {}'.format(self.first_date))
+            exit(1)
 
         while True:
             start_id, is_find_start_id = self.search_start_id()
@@ -50,17 +58,22 @@ class GetBtcDataFromBitflyer(object):
                 print('The id of the date to be searched was found: {}'.format(self.target_date_id))
                 break
 
-        # init DataFrame
-        df = pd.DataFrame(columns=self.keys)
         self.execution_history_params['before'] = 0
 
         while True:
+            # init DataFrame
+            df = pd.DataFrame(columns=self.keys)
+            result_df= pd.DataFrame(columns=self.keys)
             # init ProgressBar
             p = ProgressBar(0, self.count_limit)
             for progress_num in range(self.count_limit):
-                # request execution history
-                response = self.execute_api_request(self.execution_history_url, self.execution_history_params)
-                time.sleep(0.5)
+                try:
+                    # request execution history
+                    response = self.execute_api_request(self.execution_history_url, self.execution_history_params)
+                    time.sleep(0.5)
+                except :
+                    print('An error occurred in api request: {}'.format(response))
+                    continue
 
                 btc_list = response.json()
 
@@ -89,6 +102,10 @@ class GetBtcDataFromBitflyer(object):
     def execute_api_request(self, url, params):
         request_url = self.domain_url + url
         return requests.get(request_url, params=params)
+
+    def is_arg_date_too_past(self):
+        return self.first_date > self.arg_date
+
 
     def format_date(self, date_line):
         tmp_date = date_line.replace('T', ' ')
@@ -176,7 +193,6 @@ class GetBtcDataFromBitflyer(object):
             change_id_num = 0
 
         return change_id_num
-
 
 
 if __name__ == '__main__':
