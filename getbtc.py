@@ -42,6 +42,7 @@ class GetBtcDataFromBitflyer(object):
         self.first_date = dt.strptime('2015-06-24 05:58:00', '%Y-%m-%d %H:%M:%S')
         self.change_num_base = 500
         self.target_date_id = 0
+        self.is_searching_before_id = True
 
     def run(self):
         self.arg_date = self.arg_date.replace(second=0)
@@ -50,15 +51,15 @@ class GetBtcDataFromBitflyer(object):
             print('The first deal date: {}'.format(self.first_date))
             exit(1)
 
-        while True:
-            start_id, is_find_start_id = self.search_start_id()
-            self.execution_history_params['before'] = start_id
-            if is_find_start_id:
-                self.target_date_id = start_id
-                print('The id of the date to be searched was found: {}'.format(self.target_date_id))
-                break
+        search_before_id = 0
 
+        while self.is_searching_before_id:
+            search_before_id = self.search_before_id_pipeline(search_before_id)
+            time.sleep(0.5)
+
+        self.target_date_id = search_before_id
         self.execution_history_params['before'] = 0
+        print('The id of the date to be searched was found: {}'.format(self.target_date_id))
 
         while True:
             # init DataFrame
@@ -98,6 +99,68 @@ class GetBtcDataFromBitflyer(object):
             if df.shape[0] > result_df.shape[0]:
                 break
 
+    def search_before_id_pipeline(self, search_before_id):
+        self.execution_history_params['before'] = search_before_id
+        search_response = self.execute_api_request(self.execution_history_url, self.execution_history_params)
+        search_btc_df = pd.read_json(search_response.text)
+        search_date = self.format_date(search_btc_df['exec_date'].iloc[0])
+        print('looking for date: {}'.format(search_date))
+
+        search_before_id = self.search_before_id(search_date, search_btc_df)
+
+        return search_before_id
+
+    def search_before_id(self, search_date, search_btc_df):
+        if search_date < self.arg_date:
+            diff_second = (self.arg_date - search_date).total_seconds()
+            change_id_num = self.get_change_id_num(diff_second)
+            search_before_id = int(search_btc_df['id'][0]) + change_id_num
+
+        elif search_date > self.arg_date:
+            diff_second = (search_date - self.arg_date).total_seconds()
+            change_id_num = self.get_change_id_num(diff_second)
+            search_before_id = int(search_btc_df['id'][499]) - change_id_num
+
+        else:
+            iso_arg_date = self.arg_date - datetime.timedelta(hours=9)
+            iso_arg_date = str(iso_arg_date.hour) + ':' + str(iso_arg_date.minute)
+            for i, date in enumerate(search_btc_df['exec_date']):
+                if iso_arg_date in date:
+                    tmp_series = search_btc_df.iloc[i]
+                    search_before_id = tmp_series['id']
+            self.is_searching_before_id = False
+
+        return search_before_id
+
+    def get_change_id_num(self, diff_second):
+        diff_minutes = diff_second/60
+        diff_hour = diff_minutes/60
+        diff_date = diff_hour/24
+        diff_week = diff_date/7
+        diff_month = diff_week/4
+        diff_year = diff_month/12
+
+        if diff_year >= 1:
+            # 26,280,000
+            # floatだとパラメータが認識されない
+            change_id_num = int((self.change_num_base * 60 * 24 * 365) * 0.1)
+        elif diff_month >= 1:
+            # 4,464,000
+            change_id_num = int((self.change_num_base * 60 * 24 * 31) * 0.1)
+        elif diff_week >= 1:
+            # 10080
+            change_id_num = self.change_num_base * 60 * 24 * 7
+        elif diff_date >= 1:
+            change_id_num = self.change_num_base * 60 * 24
+        elif diff_hour >= 1:
+            change_id_num = self.change_num_base * 60
+        elif diff_minutes >= 1:
+            change_id_num = self.change_num_base
+        elif diff_minutes == 0:
+            change_id_num = 0
+
+        return change_id_num
+
     # execute api request
     def execute_api_request(self, url, params):
         request_url = self.domain_url + url
@@ -127,72 +190,20 @@ class GetBtcDataFromBitflyer(object):
         result_df.to_csv(file_name, index=False)
         print('save on {}'.format(file_name))
 
-    def search_start_id(self):
-        # request execution history
-        response = self.execute_api_request(self.execution_history_url, self.execution_history_params)
-        time.sleep(0.5)
-
-        search_btc_df = pd.read_json(response.text)
-
-        date = self.format_date(search_btc_df['exec_date'].iloc[0])
-
-        print('looking for date: {}'.format(date))
-
-        start_id, is_find_start_id = self.get_start_id(date, search_btc_df)
-
-        return start_id, is_find_start_id
-
-    def get_start_id(self, date, search_btc_df):
-        is_find_start_id = False
-        if date < self.arg_date:
-            diff_second = (self.arg_date - date).total_seconds()
-            change_id_num = self.get_chage_id_num(diff_second)
-            start_id = int(search_btc_df['id'][0]) + change_id_num
-
-        elif date > self.arg_date:
-            diff_second = (date - self.arg_date).total_seconds()
-            change_id_num = self.get_chage_id_num(diff_second)
-            start_id = int(search_btc_df['id'][499]) - change_id_num
-
-        else:
-            iso_arg_date = self.arg_date - datetime.timedelta(hours=9)
-            iso_arg_date = str(iso_arg_date.hour) + ':' + str(iso_arg_date.minute)
-            for i, date in enumerate(search_btc_df['exec_date']):
-                if iso_arg_date in date:
-                    tmp_series = search_btc_df.iloc[i]
-                    start_id = tmp_series['id']
-            is_find_start_id = True
-
-        return start_id, is_find_start_id
-
-    def get_chage_id_num(self, diff_second):
-        diff_minutes = diff_second/60
-        diff_hour = diff_minutes/60
-        diff_date = diff_hour/24
-        diff_week = diff_date/7
-        diff_month = diff_week/4
-        diff_year = diff_month/12
-
-        if diff_year >= 1:
-            # 26,280,000
-            # floatだとパラメータが認識されない
-            change_id_num = int((self.change_num_base * 60 * 24 * 365) * 0.1)
-        elif diff_month >= 1:
-            # 4,464,000
-            change_id_num = int((self.change_num_base * 60 * 24 * 31) * 0.1)
-        elif diff_week >= 1:
-            # 10080
-            change_id_num = self.change_num_base * 60 * 24 * 7
-        elif diff_date >= 1:
-            change_id_num = self.change_num_base * 60 * 24
-        elif diff_hour >= 1:
-            change_id_num = self.change_num_base * 60
-        elif diff_minutes >= 1:
-            change_id_num = self.change_num_base
-        elif diff_minutes == 0:
-            change_id_num = 0
-
-        return change_id_num
+    # def search_start_id(self):
+    #     # request execution history
+    #     response = self.execute_api_request(self.execution_history_url, self.execution_history_params)
+    #     time.sleep(0.5)
+    #
+    #     search_btc_df = pd.read_json(response.text)
+    #
+    #     date = self.format_date(search_btc_df['exec_date'].iloc[0])
+    #
+    #     print('looking for date: {}'.format(date))
+    #
+    #     start_id, is_find_start_id = self.get_start_id(date, search_btc_df)
+    #
+    #     return start_id, is_find_start_id
 
 
 if __name__ == '__main__':
