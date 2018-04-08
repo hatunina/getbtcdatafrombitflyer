@@ -3,4 +3,7 @@
 .DS_store
 
 data/
+log/
+__pycache__/
 *.csv
+*.log

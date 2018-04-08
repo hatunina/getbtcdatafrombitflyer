@@ -10,11 +10,13 @@ from datetime import datetime as dt
 import datetime
 import time
 import random
+import logger
 
 
 class GetBtcDataFromBitflyer(object):
 
-    def __init__(self, arg_date, before_id=0, count=500, file_lines=500000):
+    def __init__(self, arg_date, logger, before_id=0, count=500, file_lines=500000):
+        self.logger = logger
         self.arg_before_id = before_id
         self.count = count
         self.file_lines = file_lines
@@ -38,12 +40,15 @@ class GetBtcDataFromBitflyer(object):
 
     def run(self):
         if self.is_arg_date_too_past():
-            print('A date in the past is specified from the first deal. '
+            self.logger.logger.error('A date in the past is specified from the first deal. '
                   'Please specify a date after the date below.')
-            print('The first deal date: {}'.format(self.first_date))
+            self.logger.logger.error('The first deal date: {}'.format(self.first_date))
             exit(1)
 
         search_before_id = 0
+
+        self.logger.logger.info('START search for before id')
+        self.logger.logger.info('arg date: {}'.format(self.arg_date))
 
         while self.is_searching_before_id:
             time.sleep(0.2)
@@ -51,13 +56,13 @@ class GetBtcDataFromBitflyer(object):
                 search_before_id = self.search_before_id_pipeline(search_before_id)
                 self.execution_history_params['count'] = self.count
             except Exception as e:
-                print(e)
+                self.logger.logger.error(e)
                 random_rate = random.random()
                 self.execution_history_params['count'] = int(self.count*random_rate)
-                print('next use count: {}'.format(self.execution_history_params['count']))
+                self.logger.logger.error('next use count: {}'.format(self.execution_history_params['count']))
 
         self.target_date_id = search_before_id
-        print('The id of the date to be searched was found: {}'.format(self.target_date_id))
+        self.logger.logger.info('The id of the date to be searched was found: {}'.format(self.target_date_id))
         self.execution_history_params['before'] = 0
         self.execution_history_params['count'] = self.count
 
@@ -71,12 +76,11 @@ class GetBtcDataFromBitflyer(object):
                     response = self.execute_api_request()
                     tmp_df = pd.read_json(response.text)
                 except Exception as e:
-                    # TODO use logger
-                    print(' An error occurred in api request: {}'.format(response))
-                    print(e)
+                    self.logger.logger.error(' An error occurred in api request: {}'.format(response))
+                    self.logger.logger.error(e)
                     random_rate = random.random()
                     self.execution_history_params['count'] = int(self.count * random_rate)
-                    print('next use count: {}'.format(self.execution_history_params['count']))
+                    self.logger.logger.error('next use count: {}'.format(self.execution_history_params['count']))
                     continue
 
                 next_before_id = tmp_df['id'].iloc[-1]
@@ -98,6 +102,8 @@ class GetBtcDataFromBitflyer(object):
             if df.shape[0] > result_df.shape[0]:
                 break
 
+        self.logger.logger.info('FINISH getbtc')
+
     def search_before_id_pipeline(self, search_before_id):
         self.execution_history_params['before'] = search_before_id
 
@@ -105,12 +111,11 @@ class GetBtcDataFromBitflyer(object):
             search_response = self.execute_api_request()
             search_btc_df = pd.read_json(search_response.text)
         except Exception as e:
-            # TODO use logger
-            #print(' An error occurred in api request: {}'.format(search_response))
-            print(e)
+            self.logger.logger.error(' An error occurred in api request: {}'.format(search_response))
+            self.logger.logger.error(e)
 
         search_date = self.format_date(search_btc_df['exec_date'].iloc[0])
-        print('looking for date: {}'.format(search_date))
+        self.logger.logger.info('searching for date: {}'.format(search_date))
 
         search_before_id = self.search_before_id(search_date, search_btc_df)
 
@@ -191,9 +196,9 @@ class GetBtcDataFromBitflyer(object):
         str_first_date = str(first_date).replace(' ', '-').replace(':00', '')
         str_last_date = str(last_date).replace(' ', '-').replace(':00', '')
 
-        file_name = 'btc_{}_{}.csv'.format(str_first_date, str_last_date)
+        file_name = './data/btc_{}_{}.csv'.format(str_first_date, str_last_date)
         result_df.to_csv(file_name, index=False)
-        print(' save on {}'.format(file_name))
+        self.logger.logger.info(' save on {}'.format(file_name))
 
 
 if __name__ == '__main__':
@@ -205,14 +210,16 @@ if __name__ == '__main__':
                         required=True)
 
     args = parser.parse_args()
+    logger = logger.Logger()
+    logger.logger.info('START getbtc')
 
     try:
         arg_date = dt.strptime(args.date, '%Y-%m-%d-%H:%M:%S')
         arg_date = arg_date.replace(second=0)
     except:
-        print('The format of the date is incorrect. Please specify it in the following format.')
-        print('ex. 2018-04-07-22:06:00')
+        logger.logger.error('The format of the date is incorrect. Please specify it in the following format.')
+        logger.logger.error('ex. 2018-04-07-22:06:00')
         exit(1)
 
-    get_btc = GetBtcDataFromBitflyer(arg_date)
+    get_btc = GetBtcDataFromBitflyer(arg_date, logger)
     get_btc.run()
