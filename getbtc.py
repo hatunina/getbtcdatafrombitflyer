@@ -9,14 +9,15 @@ from progressbar import ProgressBar
 from datetime import datetime as dt
 import datetime
 import time
+import random
 
 
 class GetBtcDataFromBitflyer(object):
 
-    def __init__(self, arg_date, before_id=0, count=500, count_limit=1000):
+    def __init__(self, arg_date, before_id=0, count=500, file_lines=500000):
         self.arg_before_id = before_id
         self.count = count
-        self.count_limit = count_limit
+        self.file_lines = file_lines
         self.domain_url = 'https://api.bitflyer.jp'
         self.execution_history_url = '/v1/getexecutions'
         self.execution_history_params = {'count': self.count, 'before': self.arg_before_id}
@@ -45,35 +46,49 @@ class GetBtcDataFromBitflyer(object):
         search_before_id = 0
 
         while self.is_searching_before_id:
-            search_before_id = self.search_before_id_pipeline(search_before_id)
             time.sleep(0.2)
+            try:
+                search_before_id = self.search_before_id_pipeline(search_before_id)
+                self.execution_history_params['count'] = self.count
+            except Exception as e:
+                print(e)
+                random_rate = random.random()
+                self.execution_history_params['count'] = int(self.count*random_rate)
+                print('next use count: {}'.format(self.execution_history_params['count']))
 
         self.target_date_id = search_before_id
-        self.execution_history_params['before'] = 0
         print('The id of the date to be searched was found: {}'.format(self.target_date_id))
+        self.execution_history_params['before'] = 0
+        self.execution_history_params['count'] = self.count
 
         while True:
             df = pd.DataFrame(columns=self.keys)
             result_df = pd.DataFrame(columns=self.keys)
-            p = ProgressBar(0, self.count_limit)
-            for progress_num in range(self.count_limit):
+            p = ProgressBar(len(result_df), self.file_lines)
+            while len(result_df) <= self.file_lines:
                 try:
-                    response = self.execute_api_request()
                     time.sleep(0.2)
-                except:
+                    response = self.execute_api_request()
+                    tmp_df = pd.read_json(response.text)
+                except Exception as e:
+                    # TODO use logger
                     print(' An error occurred in api request: {}'.format(response))
+                    print(e)
+                    random_rate = random.random()
+                    self.execution_history_params['count'] = int(self.count * random_rate)
+                    print('next use count: {}'.format(self.execution_history_params['count']))
                     continue
 
-                tmp_df = pd.read_json(response.text)
                 next_before_id = tmp_df['id'].iloc[-1]
 
                 self.execution_history_params['before'] = next_before_id
+                self.execution_history_params['count'] = self.count
 
                 df = pd.concat([df, tmp_df])
 
                 result_df = df[df['id'] >= self.target_date_id]
 
-                p.update(progress_num)
+                p.update(len(result_df))
 
                 if df.shape[0] > result_df.shape[0]:
                     break
@@ -85,8 +100,15 @@ class GetBtcDataFromBitflyer(object):
 
     def search_before_id_pipeline(self, search_before_id):
         self.execution_history_params['before'] = search_before_id
-        search_response = self.execute_api_request()
-        search_btc_df = pd.read_json(search_response.text)
+
+        try:
+            search_response = self.execute_api_request()
+            search_btc_df = pd.read_json(search_response.text)
+        except Exception as e:
+            # TODO use logger
+            #print(' An error occurred in api request: {}'.format(search_response))
+            print(e)
+
         search_date = self.format_date(search_btc_df['exec_date'].iloc[0])
         print('looking for date: {}'.format(search_date))
 
@@ -98,12 +120,12 @@ class GetBtcDataFromBitflyer(object):
         if search_date < self.arg_date:
             diff_second = (self.arg_date - search_date).total_seconds()
             change_id_num = self.get_change_id_num(diff_second)
-            search_before_id = int(search_btc_df['id'][0]) + change_id_num
+            search_before_id = int(search_btc_df['id'].iloc[0]) + change_id_num
 
         elif search_date > self.arg_date:
             diff_second = (search_date - self.arg_date).total_seconds()
             change_id_num = self.get_change_id_num(diff_second)
-            search_before_id = int(search_btc_df['id'][499]) - change_id_num
+            search_before_id = int(search_btc_df['id'].iloc[-1]) - change_id_num
 
         else:
             iso_arg_date = self.arg_date - datetime.timedelta(hours=9)
