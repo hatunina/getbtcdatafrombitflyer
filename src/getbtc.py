@@ -70,7 +70,7 @@ class GetBtcDataFromBitflyer(object):
             df = pd.DataFrame(columns=self.keys)
             result_df = pd.DataFrame(columns=self.keys)
             p = ProgressBar(len(result_df), self.file_lines)
-            while len(result_df) <= self.file_lines:
+            while True:
                 try:
                     time.sleep(0.2)
                     response = self.execute_api_request()
@@ -92,10 +92,14 @@ class GetBtcDataFromBitflyer(object):
 
                 result_df = df[df['id'] >= self.target_date_id]
 
-                p.update(len(result_df))
-
-                if df.shape[0] > result_df.shape[0]:
+                if len(result_df) >= self.file_lines or df.shape[0] > result_df.shape[0]:
+                    p.update(self.file_lines)
                     break
+                else:
+                    p.update(len(result_df))
+
+                # if df.shape[0] > result_df.shape[0]:
+                #     break
 
             self.save_result_data(result_df)
 
