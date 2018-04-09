@@ -98,9 +98,6 @@ class GetBtcDataFromBitflyer(object):
                 else:
                     p.update(len(result_df))
 
-                # if df.shape[0] > result_df.shape[0]:
-                #     break
-
             self.save_result_data(result_df)
 
             if df.shape[0] > result_df.shape[0]:
