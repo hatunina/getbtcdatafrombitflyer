@@ -352,14 +352,15 @@ if __name__ == '__main__':
         exit(1)
 
     # 引数の日付チェック（start_dateの方が「最近」だとエラー）
-    if arg_start_date > arg_finish_date:
-        logger.logger.error('Please specify the date after the start date for the finish date.')
-        exit(1)
+    if args.finish_date:
+        if arg_start_date > arg_finish_date:
+            logger.logger.error('Please specify the date after the start date for the finish date.')
+            exit(1)
 
-    # finish_dateが現在の時刻より未来だとエラー
-    if arg_finish_date > dt.now():
-        logger.logger.error('Future date can not be specified.')
-        exit(1)
+        # finish_dateが現在の時刻より未来だとエラー
+        if arg_finish_date > dt.now():
+            logger.logger.error('Future date can not be specified.')
+            exit(1)
 
     get_btc = GetBtcDataFromBitflyer(arg_start_date, arg_finish_date, logger)
     get_btc.run()
