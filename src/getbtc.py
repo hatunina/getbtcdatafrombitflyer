@@ -73,7 +73,7 @@ class GetBtcDataFromBitflyer(object):
                 # または、APIを叩いた際にデータが取得できずpandasに変換してしまった場合のキャッチ
                 self.logger.logger.error(e)
                 random_rate = random.random()
-                self.execution_history_params['count'] = int(self.count*random_rate)
+                self.execution_history_params['count'] = 1 + int(self.count*random_rate)
                 self.logger.logger.error('next use count: {}'.format(self.execution_history_params['count']))
 
         # 発見した取得開始日を保持. このidまで遡ってデータを取得する
@@ -97,7 +97,7 @@ class GetBtcDataFromBitflyer(object):
                 except Exception as e:
                     self.logger.logger.error(e)
                     random_rate = random.random()
-                    self.execution_history_params['count'] = int(self.count * random_rate)
+                    self.execution_history_params['count'] = 1 + int(self.count * random_rate)
                     self.logger.logger.error('next use count: {}'.format(self.execution_history_params['count']))
             self.logger.logger.info('The id of the finish date to be searched was found: {}'.format(search_finish_id))
 
@@ -123,7 +123,7 @@ class GetBtcDataFromBitflyer(object):
                     self.logger.logger.error(' An error occurred in api request: {}'.format(response))
                     self.logger.logger.error(e)
                     random_rate = random.random()
-                    self.execution_history_params['count'] = int(self.count * random_rate)
+                    self.execution_history_params['count'] = 1 + int(self.count * random_rate)
                     self.logger.logger.error('next use count: {}'.format(self.execution_history_params['count']))
                     continue
 
