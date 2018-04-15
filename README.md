@@ -94,6 +94,10 @@ bitflyerからデータ取得開始日と終了日を指定してBTCデータを
 `-f`でファイルのパスを指定します。<br>
 上記のようにすることで、`generatehloc.py`で日足に変換し`hloc`ディレクトリに保存されているファイルを描画することができます。 <br>
 
+こんな感じで描画されます。<br>
+
+![figure_1](https://user-images.githubusercontent.com/25581362/38778440-b7f239ca-40f4-11e8-975c-98869eb273e9.png)
+
 ## 参考
 http://www.madopro.net/entry/bitcoin_chart
 
