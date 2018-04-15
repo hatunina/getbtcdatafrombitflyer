@@ -31,6 +31,9 @@ class GenerateHLOC(object):
         # 時間軸, 1分足, 1時間足, 日足
         self.time_list = ['one_minute', 'one_hour', 'one_day']
 
+        self.columns =['datetime','min', 'max', 'first', 'last', 'size']
+        self.file_lines = 500000
+
     def run(self):
         # type: (None) -> None
         """
@@ -51,6 +54,9 @@ class GenerateHLOC(object):
         self.logger.logger.info('START generate hloc')
         self.logger.logger.info('time axis: {}'.format(self.time_axis))
         self.logger.logger.info('input directory: {}'.format(self.input_dir))
+
+        summary_hloc = pd.DataFrame(columns=self.columns)
+        summary_hloc = summary_hloc.set_index('datetime')
 
         # 指定されたディレクトリからファイルを取得
         file_list = os.listdir(self.input_dir)
@@ -85,8 +91,16 @@ class GenerateHLOC(object):
             # hlocと出来高をを取得
             df_hloc = self.generate_hloc(adjust_df_btc)
 
-            # 保存
-            self.save_hloc_data(df_hloc)
+            # hlocデータをまとめる
+            summary_hloc = self.summarize_hloc(summary_hloc, df_hloc)
+
+        # まとめたデータをfile_lines(デフォルトは500,000)で分ける
+        summary_hloc_list = self.separate_summary(summary_hloc)
+
+        # 保存
+        for separate_summary in summary_hloc_list:
+            self.save_hloc_data(separate_summary)
+
 
     def get_one_minute_datetime(self, date_list):
         # type: (list) -> list
@@ -133,29 +147,47 @@ class GenerateHLOC(object):
         self.logger.logger.info('generate hloc')
 
         # ベースとなるデータフレーム作成と安値取得
-        summary = adjust_df_btc[['datetime', 'price']].groupby(['datetime']).min().rename(columns={'price': 'min'})
+        df_hloc = adjust_df_btc[['datetime', 'price']].groupby(['datetime']).min().rename(columns={'price': 'min'})
 
         # 高値を取得しマージ
-        summary = summary.merge(
+        df_hloc = df_hloc.merge(
             adjust_df_btc[['datetime', 'price']].groupby(['datetime']).max().rename(columns={'price': 'max'}),
             left_index=True, right_index=True)
 
         # 始値を取得しマージ
-        summary = summary.merge(
+        df_hloc = df_hloc.merge(
             adjust_df_btc[['datetime', 'price']].groupby(['datetime']).last().rename(columns={'price': 'first'}),
             left_index=True, right_index=True)
 
         # 終値を取得しマージ
-        summary = summary.merge(
+        df_hloc = df_hloc.merge(
             adjust_df_btc[['datetime', 'price']].groupby(['datetime']).first().rename(columns={'price': 'last'}),
             left_index=True, right_index=True)
 
         # 出来高を取得しマージ
-        summary = summary.merge(
+        df_hloc = df_hloc.merge(
             adjust_df_btc[['datetime', 'size']].groupby(['datetime']).sum(),
             left_index=True, right_index=True)
 
-        return summary
+        return df_hloc
+
+    def summarize_hloc(self, summary_hloc, df_hloc):
+        self.logger.logger.info('summarize_hloc')
+        summary_hloc = pd.concat([summary_hloc, df_hloc])
+        self.logger.logger.info('summary lines: {}'.format(len(summary_hloc)))
+        return summary_hloc
+
+    def separate_summary(self, summary_hloc):
+        self.logger.logger.info('separate_summary')
+        summary_hloc_list = []
+
+        for file_num in range(int(len(summary_hloc)/self.file_lines)+1):
+            # スライスでfile_linesごとに分ける
+            tmp_summary = summary_hloc[self.file_lines*file_num:self.file_lines*(file_num+1)]
+            summary_hloc_list.append(tmp_summary)
+            self.logger.logger.info('separated: {}'.format(file_num))
+
+        return summary_hloc_list
 
     def save_hloc_data(self, df_hloc):
         # type: (df) -> None
@@ -168,7 +200,7 @@ class GenerateHLOC(object):
         # ファイル名作成
         str_first_date = str(df_hloc.index[0]).replace(' ', '-')
         str_last_date = str(df_hloc.index[-1]).replace(' ', '-')
-        file_name = './data/hloc/hloc_{}_{}_{}.csv'.format(self.time_axis, str_first_date, str_last_date)
+        file_name = './hloc/hloc_{}_{}_{}.csv'.format(self.time_axis, str_first_date, str_last_date)
 
         # 保存
         df_hloc.to_csv(file_name)
