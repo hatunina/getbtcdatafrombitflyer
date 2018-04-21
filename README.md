@@ -8,6 +8,8 @@ bitflyerからデータ取得開始日と終了日を指定してBTCデータを
 # Usage
 ## getbtc.py
 bitflyerからデータ取得開始日と終了日を指定してBTCデータを保存するスクリプトです。 <br>
+デフォルトでは現物の価格を取得します。<br>
+FXの価格が欲しい場合は、APIを叩く際のクエリに`"product_code": "FX_BTC_JPY" `を指定するように変更お願いします。<br>
 
  <br>
  
