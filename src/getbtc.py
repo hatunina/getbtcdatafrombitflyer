@@ -22,7 +22,11 @@ class GetBtcDataFromBitflyer(object):
         self.file_lines = file_lines
         self.domain_url = 'https://api.bitflyer.jp'
         self.execution_history_url = '/v1/getexecutions'
-        self.execution_history_params = {'count': self.count, 'before': self.arg_before_id}
+        self.execution_history_params = {'count': self.count, 
+                                            'before': self.arg_before_id, 
+                                            'product_code': 'FX_BTC_JPY'}
+                                            
+        self.health_check_params = {'product_code': 'FX_BTC_JPY'}
 
         self.keys = ['id',
                      'side',
@@ -69,9 +73,14 @@ class GetBtcDataFromBitflyer(object):
                 # データ取得件数をリセット
                 self.execution_history_params['count'] = self.count
             except Exception as e:
-                # before_idの前に取得件数分のデータがない場合はエラー？ countを調整して再度ループ
+                # before_idの前に取得件数分のデータがない場合はエラー？サーバが忙しい？
                 # または、APIを叩いた際にデータが取得できずpandasに変換してしまった場合のキャッチ
+                # スリープしcountを調整して再度ループ
                 self.logger.logger.error(e)
+                # サーバのステータスチェック
+                status = requests.get('https://api.bitflyer.jp/v1/gethealth', params=self.health_check_params)
+                self.logger.logger('server status: {}'.format(status.text))
+                time.sleep(10)
                 random_rate = random.random()
                 self.execution_history_params['count'] = 1 + int(self.count*random_rate)
                 self.logger.logger.error('next use count: {}'.format(self.execution_history_params['count']))
@@ -96,6 +105,10 @@ class GetBtcDataFromBitflyer(object):
                     self.execution_history_params['count'] = self.count
                 except Exception as e:
                     self.logger.logger.error(e)
+                    # サーバのステータスチェック
+                    status = requests.get('https://api.bitflyer.jp/v1/gethealth', params=self.health_check_params)
+                    self.logger.logger('server status: {}'.format(status.text))
+                    time.sleep(10)
                     random_rate = random.random()
                     self.execution_history_params['count'] = 1 + int(self.count * random_rate)
                     self.logger.logger.error('next use count: {}'.format(self.execution_history_params['count']))
@@ -122,6 +135,10 @@ class GetBtcDataFromBitflyer(object):
                 except Exception as e:
                     self.logger.logger.error(' An error occurred in api request: {}'.format(response))
                     self.logger.logger.error(e)
+                    # サーバのステータスチェック
+                    status = requests.get('https://api.bitflyer.jp/v1/gethealth', params=self.health_check_params)
+                    self.logger.logger('server status: {}'.format(status.text))
+                    time.sleep(10)
                     random_rate = random.random()
                     self.execution_history_params['count'] = 1 + int(self.count * random_rate)
                     self.logger.logger.error('next use count: {}'.format(self.execution_history_params['count']))
@@ -334,9 +351,14 @@ if __name__ == '__main__':
                         required=False)
 
     args = parser.parse_args()
+    
+    # ディレクトリチェック
+    assert os.path.exists('./data'), print('Please make directry: data directory')
+    assert os.path.exists('./log'), print('Please make directry: log dirctory')
+    
     logger = logger.Logger()
     logger.logger.info('START getbtc')
-
+    
     try:
         arg_start_date = dt.strptime(args.start_date, '%Y-%m-%d-%H:%M:%S')
         arg_start_date = arg_start_date.replace(second=0)
