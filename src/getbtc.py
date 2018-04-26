@@ -137,7 +137,7 @@ class GetBtcDataFromBitflyer(object):
                     self.logger.logger.error(e)
                     # サーバのステータスチェック
                     status = requests.get('https://api.bitflyer.jp/v1/gethealth', params=self.health_check_params)
-                    self.logger.logger('server status: {}'.format(status.text))
+                    self.logger.logger.error('server status: {}'.format(status.text))
                     time.sleep(10)
                     random_rate = random.random()
                     self.execution_history_params['count'] = 1 + int(self.count * random_rate)
