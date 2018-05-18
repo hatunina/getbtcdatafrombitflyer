@@ -353,8 +353,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     # ディレクトリチェック
-    assert os.path.exists('./data'), print('Please make directry: data directory')
-    assert os.path.exists('./log'), print('Please make directry: log dirctory')
+    assert os.path.exists('./data'), 'Please make directry: data directory'
+    assert os.path.exists('./log'), 'Please make directry: log dirctory'
     
     logger = logger.Logger()
     logger.logger.info('START getbtc')
