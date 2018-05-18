@@ -1,5 +1,6 @@
 # getbtcdatafrombitflyer
 bitflyerからデータ取得開始日と終了日を指定してBTCデータを保存したりHLOCデータへ変換したり描画したりするスクリプトです。 <br>
+2018/05/19 `generatehloc.py`に５分足追加 <br>
 
 # Requirements
 `pip install pandas` <br>
@@ -78,13 +79,14 @@ bitflyerからデータ取得開始日と終了日を指定してBTCデータを
 
 <br>
 
-現バージョンでは、1分足、1時間足、日足が指定できます。 <br>
+現バージョンでは、1分足、5分足、1時間足、日足が指定できます。 <br>
 それぞれ、下記のようにしてください。 <br>
 <br>
 
 | 時間軸        | 指定方法          |
 | --------------- |---------------|
 | 1分足 | one_minute |
+| 5分足 | 5_minute |
 | 1時間足 | one_hour |
 | 日足 | one_day |
 
