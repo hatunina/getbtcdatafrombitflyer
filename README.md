@@ -1,5 +1,6 @@
 # getbtcdatafrombitflyer
 bitflyerからデータ取得開始日と終了日を指定してBTCデータを保存したりHLOCデータへ変換したり描画したりするスクリプトです。 <br>
+<br>
 2018/05/19 `generatehloc.py`に５分足追加 <br>
 
 # Requirements
