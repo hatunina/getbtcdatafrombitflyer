@@ -28,8 +28,8 @@ class GenerateHLOC(object):
         self.input_dir = input_dir
         # 作りたい足を指定
         self.time_axis = time_axis
-        # 時間軸, 1分足, 1時間足, 日足
-        self.time_list = ['one_minute', 'one_hour', 'one_day']
+        # 時間軸, 1分足, 5分足, 1時間足, 日足
+        self.time_list = ['one_minute', '5_minute', 'one_hour', 'one_day']
 
         self.columns =['datetime','min', 'max', 'first', 'last', 'size']
         self.file_lines = 500000
@@ -64,6 +64,42 @@ class GenerateHLOC(object):
         for file_name in file_list:
             # ディレクトリに存在するファイルを一つずつ読み込む
             df_btc = self.load_btc_data(file_name)
+            
+            # 5分足, TODO ちゃんと書く
+            if self.time_axis in '5_minute':
+                df_btc['exec_date'] = df_btc['exec_date'].map(self.format_date2)
+                tmp_df = df_btc[['exec_date', 'price']]
+                datetime_index = pd.DatetimeIndex(tmp_df['exec_date'])                                                                                                                                                                        
+                tmp_df.index = datetime_index
+                tmp_df = tmp_df.drop('exec_date', axis=1)
+                
+                # mean は特に意味はない(直でindexwp取得するとFutureWarningが出るため)
+                hloc_index = tmp_df.resample('5T').mean().index
+                max = tmp_df.resample('5T').max()
+                min = tmp_df.resample('5T').min()
+                first = tmp_df.resample('5T').first()
+                last =  tmp_df.resample('5T').last()
+                
+                df_size = df_btc[['exec_date', 'size']]
+                df_size.index = datetime_index
+                df_size = df_size.drop('exec_date', axis=1)
+                size = df_size.resample('5T').sum()
+                
+                df_hloc = pd.DataFrame(index=hloc_index)
+                df_hloc = df_hloc.join(max)
+                df_hloc = df_hloc.rename(columns={'price': 'max'})
+                df_hloc = df_hloc.join(min)
+                df_hloc = df_hloc.rename(columns={'price': 'min'})
+                df_hloc = df_hloc.join(first)
+                df_hloc = df_hloc.rename(columns={'price': 'first'})
+                df_hloc = df_hloc.join(last)
+                df_hloc = df_hloc.rename(columns={'price': 'last'})
+                df_hloc = df_hloc.join(size)
+                df_hloc['datetime'] = df_hloc.index
+              
+                summary_hloc = self.summarize_hloc(summary_hloc, df_hloc)
+
+                continue
 
             # 時間を取り出しISOから日本時間に直しリストへ格納
             date_list = []
@@ -99,6 +135,7 @@ class GenerateHLOC(object):
 
         # 保存
         for separate_summary in summary_hloc_list:
+            separate_summary = separate_summary.sort_index()
             self.save_hloc_data(separate_summary)
 
 
@@ -235,6 +272,15 @@ class GenerateHLOC(object):
             date = date + datetime.timedelta(hours=9)
             date_list.append(date)
         return date_list
+        
+    @staticmethod
+    def format_date2(date):
+        date = date.replace('T', ' ')
+        date = date.split('.')
+        date = date[0]
+        date = dt.strptime(date, '%Y-%m-%d %H:%M:%S')
+        date = date + datetime.timedelta(hours=9)
+        return date
 
 
 if __name__ == '__main__':
@@ -245,7 +291,9 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--time', help='time axis',
                         action='store',
                         required=True)
-
+                        
+    assert os.path.exists('./hloc'), 'Please make directry: hloc directory'
+    
     args = parser.parse_args()
     logger = logger.Logger()
 
